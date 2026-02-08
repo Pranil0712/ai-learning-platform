@@ -1,6 +1,6 @@
 variable "ami_id" {
   type    = string
-  default = "ami-03f487875bd4384ee"
+  default = "ami-019715e0d74f695be"
 }
 
 variable "instance_type" {
@@ -10,5 +10,5 @@ variable "instance_type" {
 
 variable "key_name" {
   type    = string
-  # Leave default out so you are forced to remember which key you downloaded
+  default = "ap-south-1-key"
 }
