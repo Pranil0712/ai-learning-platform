@@ -1,91 +1,43 @@
 ---
-- name: Install DevOps Tools on EC2
+- name: Install DevOps Tools on EC2 (Ubuntu 24.04)
   hosts: devops
   become: yes
 
   tasks:
-    # ---------------------------
-    # CLEANUP OLD JENKINS REPO (from previous broken runs)
-    # ---------------------------
-    - name: Remove old Jenkins repository file
-      file:
-        path: /etc/apt/sources.list.d/jenkins.list
-        state: absent
 
-    - name: Remove old Jenkins ASCII key (if present)
-      file:
-        path: /usr/share/keyrings/jenkins-keyring.asc
-        state: absent
-
-    # ---------------------------
-    # JENKINS DEPENDENCIES
-    # ---------------------------
-    - name: Install Dependencies for Jenkins
-      apt:
-        name:
-          - ca-certificates
-          - curl
-          - gnupg
-        state: present
-        update_cache: yes
-
-    # ---------------------------
-    # JENKINS REPOSITORY (fixed key handling)
-    # ---------------------------
-    - name: Remove old Jenkins binary keyring (if any)
-      file:
-        path: /usr/share/keyrings/jenkins-keyring.gpg
-        state: absent
-
-    - name: Download Jenkins key (ASCII armored)
-      get_url:
-        url: https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
-        dest: /tmp/jenkins-key.asc
-        mode: '0644'
-
-    - name: Convert Jenkins key to binary keyring
-      command: gpg --dearmor -o /usr/share/keyrings/jenkins-keyring.gpg /tmp/jenkins-key.asc
-
-    - name: Set permissions on keyring
-      file:
-        path: /usr/share/keyrings/jenkins-keyring.gpg
-        mode: '0644'
-
-    - name: Add Jenkins repository (with signed-by)
-      apt_repository:
-        repo: "deb [signed-by=/usr/share/keyrings/jenkins-keyring.gpg] https://pkg.jenkins.io/debian-stable binary/"
-        state: present
-        filename: jenkins
-        update_cache: no
-
-    - name: Update apt cache (with retries)
+    # =====================================
+    # SYSTEM PREPARATION
+    # =====================================
+    - name: Update apt cache
       apt:
         update_cache: yes
-      register: apt_update
-      retries: 3
-      delay: 5
-      until: apt_update is success
 
-    # ---------------------------
-    # SYSTEM UPDATE
-    # ---------------------------
-    - name: Update OS
+    - name: Upgrade system packages
       apt:
         upgrade: dist
 
-    # ---------------------------
-    # DOCKER
-    # ---------------------------
+    - name: Install base dependencies
+      apt:
+        name:
+          - curl
+          - ca-certificates
+          - gnupg
+          - lsb-release
+        state: present
+
+    # =====================================
+    # DOCKER INSTALLATION
+    # =====================================
     - name: Install Docker
       apt:
         name: docker.io
         state: present
 
-    - name: Start Docker
-      service:
+    - name: Enable and start Docker
+      systemd:
         name: docker
+        enabled: yes
         state: started
-        enabled: true
 
     - name: Add ubuntu user to docker group
       user:
@@ -93,29 +45,36 @@
         groups: docker
         append: yes
 
-    # ---------------------------
-    # JENKINS (continued)
-    # ---------------------------
-    - name: Install Java 21 (Latest Jenkins Requirement)
-      apt:
-        name: openjdk-21-jdk
-        state: present
+    # =====================================
+    # JENKINS (DOCKER-BASED - STABLE)
+    # =====================================
+    - name: Pull Jenkins LTS Docker image
+      shell: docker pull jenkins/jenkins:lts
+      args:
+        warn: false
 
-    - name: Install Jenkins
-      apt:
-        name: jenkins
-        state: present
+    - name: Create Jenkins volume
+      shell: docker volume create jenkins_home
+      args:
+        warn: false
 
-    - name: Start Jenkins
-      service:
-        name: jenkins
-        state: started
-        enabled: true
+    - name: Run Jenkins container
+      shell: |
+        docker run -d \
+          --name jenkins \
+          -p 8080:8080 \
+          -p 50000:50000 \
+          -v jenkins_home:/var/jenkins_home \
+          --restart unless-stopped \
+          jenkins/jenkins:lts
+      args:
+        warn: false
+      ignore_errors: yes
 
-    # ---------------------------
-    # K3S (Kubernetes)
-    # ---------------------------
-    - name: Install K3s (Kubernetes)
+    # =====================================
+    # K3S (LIGHTWEIGHT KUBERNETES)
+    # =====================================
+    - name: Install K3s
       shell: curl -sfL https://get.k3s.io | sh -
       args:
         creates: /usr/local/bin/k3s
@@ -123,7 +82,7 @@
     - name: Wait for K3s to be ready
       shell: kubectl get nodes
       register: k3s_status
-      retries: 5
+      retries: 6
       delay: 10
       until: k3s_status.rc == 0
 
@@ -136,10 +95,10 @@
       args:
         creates: /home/ubuntu/.kube/config
 
-    # ---------------------------
-    # HELM
-    # ---------------------------
-    - name: Download Helm install script
+    # =====================================
+    # HELM INSTALLATION
+    # =====================================
+    - name: Download Helm installation script
       get_url:
         url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
         dest: /tmp/get_helm.sh
