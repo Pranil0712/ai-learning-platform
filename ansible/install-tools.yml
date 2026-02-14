@@ -50,13 +50,11 @@
     # =====================================
     - name: Pull Jenkins LTS Docker image
       shell: docker pull jenkins/jenkins:lts
-      args:
-        warn: false
 
     - name: Create Jenkins volume
       shell: docker volume create jenkins_home
       args:
-        warn: false
+        creates: /var/lib/docker/volumes/jenkins_home
 
     - name: Run Jenkins container
       shell: |
@@ -68,9 +66,8 @@
           --restart unless-stopped \
           jenkins/jenkins:lts
       args:
-        warn: false
-      ignore_errors: yes
-
+        creates: /var/lib/docker/containers/jenkins
+        
     # =====================================
     # K3S (LIGHTWEIGHT KUBERNETES)
     # =====================================
