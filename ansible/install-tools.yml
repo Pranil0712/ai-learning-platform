@@ -5,6 +5,19 @@
 
   tasks:
     # ---------------------------
+    # CLEANUP OLD JENKINS REPO (from previous broken runs)
+    # ---------------------------
+    - name: Remove old Jenkins repository file
+      file:
+        path: /etc/apt/sources.list.d/jenkins.list
+        state: absent
+
+    - name: Remove old Jenkins ASCII key (if present)
+      file:
+        path: /usr/share/keyrings/jenkins-keyring.asc
+        state: absent
+
+    # ---------------------------
     # JENKINS DEPENDENCIES (needed for key conversion)
     # ---------------------------
     - name: Install Dependencies for Jenkins
@@ -14,7 +27,7 @@
           - curl
           - gnupg
         state: present
-        update_cache: yes      # safe first update using default repositories
+        update_cache: yes      # safe now because old repo is gone
 
     # ---------------------------
     # JENKINS REPOSITORY (fixed key handling)
