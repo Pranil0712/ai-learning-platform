@@ -39,6 +39,28 @@
         name: openjdk-21-jdk
         state: present
 
+    - name: Clean up existing Jenkins artifacts
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/apt/sources.list.d/jenkins.list
+        - /usr/share/keyrings/jenkins-keyring.gpg
+
+    - name: Force import Jenkins key into global trust store
+      shell: |
+        curl -fsSL https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key | apt-key add -
+      # Note: apt-key is technically deprecated, but it's the most reliable way to fix this specific loop.
+
+    - name: Create Jenkins source list (Standard format)
+      copy:
+        dest: /etc/apt/sources.list.d/jenkins.list
+        content: "deb https://pkg.jenkins.io/debian-stable binary/"
+
+    - name: Update apt cache (The Moment of Truth)
+      apt:
+        update_cache: yes
+
     - name: Add Jenkins Repository Key
       get_url:
         url: https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
