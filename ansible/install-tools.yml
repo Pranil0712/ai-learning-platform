@@ -4,11 +4,49 @@
   become: yes
 
   tasks:
+    # ---------------------------
+    # JENKINS DEPENDENCIES (needed for key conversion)
+    # ---------------------------
+    - name: Install Dependencies for Jenkins
+      apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+        state: present
+        update_cache: yes      # safe first update using default repositories
+
+    # ---------------------------
+    # JENKINS REPOSITORY (fixed key handling)
+    # ---------------------------
+    - name: Download Jenkins key (ASCII armored)
+      get_url:
+        url: https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
+        dest: /tmp/jenkins-key.asc
+        mode: '0644'
+
+    - name: Convert Jenkins key to binary keyring
+      command: gpg --dearmor -o /usr/share/keyrings/jenkins-keyring.gpg /tmp/jenkins-key.asc
+      args:
+        creates: /usr/share/keyrings/jenkins-keyring.gpg
+
+    - name: Add Jenkins repository (with signed-by)
+      apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/jenkins-keyring.gpg] https://pkg.jenkins.io/debian-stable binary/"
+        state: present
+        filename: jenkins
+
+    # ---------------------------
+    # SYSTEM UPDATE (now includes Jenkins repo with valid key)
+    # ---------------------------
     - name: Update OS
       apt:
         update_cache: yes
         upgrade: dist
 
+    # ---------------------------
+    # DOCKER
+    # ---------------------------
     - name: Install Docker
       apt:
         name: docker.io
@@ -26,58 +64,18 @@
         groups: docker
         append: yes
 
-    - name: Install Dependencies for Jenkins
-      apt:
-        name:
-          - ca-certificates
-          - curl
-          - gnupg
-        state: present
-
+    # ---------------------------
+    # JENKINS (continued)
+    # ---------------------------
     - name: Install Java 21 (Latest Jenkins Requirement)
       apt:
         name: openjdk-21-jdk
         state: present
 
-    - name: Clean up existing Jenkins artifacts
-      file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - /etc/apt/sources.list.d/jenkins.list
-        - /usr/share/keyrings/jenkins-keyring.gpg
-
-    - name: Force import Jenkins key into global trust store
-      shell: |
-        curl -fsSL https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key | apt-key add -
-      # Note: apt-key is technically deprecated, but it's the most reliable way to fix this specific loop.
-
-    - name: Create Jenkins source list (Standard format)
-      copy:
-        dest: /etc/apt/sources.list.d/jenkins.list
-        content: "deb https://pkg.jenkins.io/debian-stable binary/"
-
-    - name: Update apt cache (The Moment of Truth)
-      apt:
-        update_cache: yes
-
-    - name: Add Jenkins Repository Key
-      get_url:
-        url: https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
-        dest: /usr/share/keyrings/jenkins-keyring.asc
-        mode: '0644'
-
-    - name: Add Jenkins Repository
-      apt_repository:
-        repo: "deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/"
-        state: present
-        update_cache: yes
-
     - name: Install Jenkins
       apt:
         name: jenkins
         state: present
-        update_cache: yes
 
     - name: Start Jenkins
       service:
@@ -85,10 +83,20 @@
         state: started
         enabled: true
 
+    # ---------------------------
+    # K3S (Kubernetes)
+    # ---------------------------
     - name: Install K3s (Kubernetes)
       shell: curl -sfL https://get.k3s.io | sh -
       args:
         creates: /usr/local/bin/k3s
+
+    - name: Wait for K3s to be ready
+      shell: kubectl get nodes
+      register: k3s_status
+      retries: 5
+      delay: 10
+      until: k3s_status.rc == 0
 
     - name: Configure kubectl for ubuntu user
       shell: |
@@ -99,7 +107,16 @@
       args:
         creates: /home/ubuntu/.kube/config
 
+    # ---------------------------
+    # HELM
+    # ---------------------------
+    - name: Download Helm install script
+      get_url:
+        url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+        dest: /tmp/get_helm.sh
+        mode: '0755'
+
     - name: Install Helm
-      shell: curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+      shell: /tmp/get_helm.sh
       args:
         creates: /usr/local/bin/helm
