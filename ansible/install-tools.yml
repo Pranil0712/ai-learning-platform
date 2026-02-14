@@ -18,7 +18,7 @@
         state: absent
 
     # ---------------------------
-    # JENKINS DEPENDENCIES (needed for key conversion)
+    # JENKINS DEPENDENCIES
     # ---------------------------
     - name: Install Dependencies for Jenkins
       apt:
@@ -27,11 +27,16 @@
           - curl
           - gnupg
         state: present
-        update_cache: yes      # safe now because old repo is gone
+        update_cache: yes
 
     # ---------------------------
     # JENKINS REPOSITORY (fixed key handling)
     # ---------------------------
+    - name: Remove old Jenkins binary keyring (if any)
+      file:
+        path: /usr/share/keyrings/jenkins-keyring.gpg
+        state: absent
+
     - name: Download Jenkins key (ASCII armored)
       get_url:
         url: https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
@@ -40,21 +45,32 @@
 
     - name: Convert Jenkins key to binary keyring
       command: gpg --dearmor -o /usr/share/keyrings/jenkins-keyring.gpg /tmp/jenkins-key.asc
-      args:
-        creates: /usr/share/keyrings/jenkins-keyring.gpg
+
+    - name: Set permissions on keyring
+      file:
+        path: /usr/share/keyrings/jenkins-keyring.gpg
+        mode: '0644'
 
     - name: Add Jenkins repository (with signed-by)
       apt_repository:
         repo: "deb [signed-by=/usr/share/keyrings/jenkins-keyring.gpg] https://pkg.jenkins.io/debian-stable binary/"
         state: present
         filename: jenkins
+        update_cache: no
+
+    - name: Update apt cache (with retries)
+      apt:
+        update_cache: yes
+      register: apt_update
+      retries: 3
+      delay: 5
+      until: apt_update is success
 
     # ---------------------------
-    # SYSTEM UPDATE (now includes Jenkins repo with valid key)
+    # SYSTEM UPDATE
     # ---------------------------
     - name: Update OS
       apt:
-        update_cache: yes
         upgrade: dist
 
     # ---------------------------
