@@ -1,0 +1,19 @@
+apiVersion: apps/V1
+kind: Deployment
+Metadata:
+    name: ai-learning-platform
+spec:
+  replicas: {{.Values.replicaCount}}
+  selector:
+    matchLabels:
+      app: ai-learning-platform
+  template:
+    metadata:
+      labels:
+        app: ai-learning-platform
+    spec:
+      containers:
+        - name: app
+          image: "{{Values.image.repo}}:{{Values.image.tag}}"
+          port:
+            - containerPort: 3000

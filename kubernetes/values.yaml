@@ -1,0 +1,11 @@
+replicaCount: 2
+
+image:
+  repository: pranil0712/ai-learning-platform
+  tag: "1.0"
+  pullPolicy: IfNotPresent
+
+service:
+  type: NodePort
+  port: 3000
+  nodePort: 30007
