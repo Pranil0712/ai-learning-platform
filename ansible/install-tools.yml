@@ -46,28 +46,32 @@
         append: yes
 
     # =====================================
-    # JENKINS (DOCKER-BASED - STABLE)
+    # JENKINS (DOCKER-BASED - CORRECT SETUP)
     # =====================================
+
     - name: Pull Jenkins LTS Docker image
       shell: docker pull jenkins/jenkins:lts
 
     - name: Create Jenkins volume
       shell: docker volume create jenkins_home
-      args:
-        creates: /var/lib/docker/volumes/jenkins_home
+      ignore_errors: yes
 
-    - name: Run Jenkins container
+    - name: Remove old Jenkins container if exists
+      shell: docker rm -f jenkins
+      ignore_errors: yes
+
+    - name: Run Jenkins container with Docker access
       shell: |
         docker run -d \
           --name jenkins \
           -p 8080:8080 \
           -p 50000:50000 \
           -v jenkins_home:/var/jenkins_home \
+          -v /var/run/docker.sock:/var/run/docker.sock \
+          -v $(which docker):/usr/bin/docker \
           --restart unless-stopped \
           jenkins/jenkins:lts
-      args:
-        creates: /var/lib/docker/containers/jenkins
-        
+
     # =====================================
     # K3S (LIGHTWEIGHT KUBERNETES)
     # =====================================
