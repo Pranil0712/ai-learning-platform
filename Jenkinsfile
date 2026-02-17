@@ -2,7 +2,8 @@ pipeline {
     agent any
 
     environment {
-        IMAGE = "pranil0712/ai-learning-platform:1.0"
+        IMAGE_NAME = "pranil0712/ai-learning-platform"
+        IMAGE_TAG = "${BUILD_NUMBER}"
     }
 
     stages {
@@ -15,20 +16,20 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                sh 'docker build -f docker/Dockerfile -t $IMAGE .'
+                sh "docker build -f docker/Dockerfile -t ${IMAGE_NAME}:${IMAGE_TAG} ."
             }
         }
 
         stage('Push to DockerHub') {
             steps {
                 withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-creds',
+                    credentialsId: 'docker-creds',
                     usernameVariable: 'USER',
                     passwordVariable: 'PASS'
                 )]) {
                     sh '''
                         echo $PASS | docker login -u $USER --password-stdin
-                        docker push $IMAGE
+                        docker push ${IMAGE_NAME}:${IMAGE_TAG}
                     '''
                 }
             }
@@ -36,7 +37,11 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
-                sh 'helm upgrade --install ai-app ./kubernetes/Helm'
+                sh """
+                helm upgrade --install ai-app ./kubernetes/Helm \
+                --set image.repository=${IMAGE_NAME} \
+                --set image.tag=${IMAGE_TAG}
+                """
             }
         }
     }
