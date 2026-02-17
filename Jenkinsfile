@@ -36,7 +36,7 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
-                sh 'helm upgrade --install ai-app kubernetes'
+                sh 'helm upgrade --install ai-app ./kubernetes/Helm'
             }
         }
     }
